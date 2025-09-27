@@ -1,3 +1,7 @@
+# ==============================
+# BANK STATEMENT AUTOMATION: EXTRACTION
+# ==============================
+
 import os
 import pandas as pd
 
