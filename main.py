@@ -85,7 +85,10 @@ def extract_excel_transactions(file_path: str) -> pd.DataFrame:
             if re.match(r"^\d{2}/\d{2}$", date_str):  # DD/MM
                 date_str = f"{date_str}/{YEAR}"
             doc_date = pd.to_datetime(date_str, dayfirst=True, errors="coerce")
-            doc_date = doc_date.strftime("%d/%m/%Y") if pd.notna(doc_date) else ""
+            try:
+                doc_date = doc_date.strftime("%-d/%-m/%Y")  # Linux/macOS
+            except:
+                doc_date = doc_date.strftime("%#d/%#m/%Y")  # Windows fallback
 
             record = {
                 "DocNo": doc_no,
