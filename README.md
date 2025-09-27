@@ -1,1 +1,3 @@
-Project Title: Bank Statement Automation
+# Project Title: Bank Statement Automation
+
+Ongoing freelance projects
