@@ -1,16 +1,16 @@
-# ==============================
-# BANK STATEMENT AUTOMATION: EXTRACTION
-# ==============================
-
 import os
 import pandas as pd
+import re
 
 # ==============================
-# Step 1: Define Paths
+# Step 1: Define Paths & Config
 # ==============================
 DATA_DIR = "data"
 OUTPUT_DIR = "output"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "processed_statement.xlsx")
+
+# >>> Edit this for the year of the statement <<<
+YEAR = "2025"
 
 # ==============================
 # Step 2: Define Template Columns
@@ -27,16 +27,22 @@ TEMPLATE_COLUMNS = [
 # Step 3: Extract Transactions from Excel
 # ==============================
 def extract_excel_transactions(file_path: str) -> pd.DataFrame:
-    df = pd.read_excel(file_path, sheet_name="Table 1", header=0)
+    df = pd.read_excel(file_path, sheet_name=0, header=0)
 
     records = []
-    counter = 1
+    or_counter = 1
+    pv_counter = 1
     current_desc = []
+    last_entry_date = None
 
     for idx, row in df.iterrows():
-        entry_date = row.iloc[0]   # TARIKH MASUK / ENTRY DATE
+        entry_date = row.iloc[0]   # ENTRY DATE
         description = row.iloc[4]  # TRANSACTION DESCRIPTION
         amount = row.iloc[13]      # TRANSACTION AMOUNT
+
+        # Track last non-empty date
+        if pd.notna(entry_date):
+            last_entry_date = entry_date
 
         # Skip header-like rows
         if isinstance(description, str) and "BEGINNING BALANCE" in description.upper():
@@ -45,8 +51,8 @@ def extract_excel_transactions(file_path: str) -> pd.DataFrame:
             continue
 
         # Valid transaction row
-        if pd.notna(entry_date) and pd.notna(amount):
-            # Merge leftover description lines to previous record
+        if last_entry_date is not None and pd.notna(amount):
+            # Merge leftover description lines into last record
             if current_desc and records:
                 merged_desc = " ".join([d for d in current_desc if pd.notna(d)])
                 records[-1]["Extracted Description"] += " " + merged_desc
@@ -64,12 +70,29 @@ def extract_excel_transactions(file_path: str) -> pd.DataFrame:
             except ValueError:
                 continue
 
+            # Assign DocNo and DocType
+            if numeric_amount >= 0:
+                doc_no = f"OR{or_counter}"
+                doc_type = "OR"
+                or_counter += 1
+            else:
+                doc_no = f"PV{pv_counter}"
+                doc_type = "PV"
+                pv_counter += 1
+
+            # Build DocDate string with configured YEAR
+            date_str = str(last_entry_date).strip()
+            if re.match(r"^\d{2}/\d{2}$", date_str):  # DD/MM
+                date_str = f"{date_str}/{YEAR}"
+            doc_date = pd.to_datetime(date_str, dayfirst=True, errors="coerce")
+            doc_date = doc_date.strftime("%d/%m/%Y") if pd.notna(doc_date) else ""
+
             record = {
-                "DocNo": f"OR{counter}",
+                "DocNo": doc_no,
                 "DocNo2": "",
-                "DocDate": pd.to_datetime(entry_date, errors="coerce").date() if pd.notna(entry_date) else "",
+                "DocDate": doc_date,
                 "TaxDate": "",
-                "DocType": "OR",
+                "DocType": doc_type,
                 "JournalType": "",
                 "DealWith": "",
                 "TaxEntity": "",
@@ -89,10 +112,9 @@ def extract_excel_transactions(file_path: str) -> pd.DataFrame:
                 "BankChargeDeptNo": ""
             }
             records.append(record)
-            counter += 1
 
-        # Continuation row (no date/amount but has description text)
-        elif pd.isna(entry_date) and pd.isna(amount) and pd.notna(description):
+        # Continuation row (no amount but description exists)
+        elif pd.isna(amount) and pd.notna(description):
             current_desc.append(str(description).strip())
 
     # Flush last continuation description
