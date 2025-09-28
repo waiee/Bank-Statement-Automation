@@ -2,19 +2,11 @@ import os
 import pandas as pd
 import re
 
-# ==============================
-# Step 1: Define Paths & Config
-# ==============================
 DATA_DIR = "data"
 OUTPUT_DIR = "output"
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, "processed_statement.xlsx")
-
-# >>> Edit this for the year of the statement <<<
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, "WC_statements.xlsx")
 YEAR = "2025"
 
-# ==============================
-# Step 2: Define Template Columns
-# ==============================
 TEMPLATE_COLUMNS = [
     "DocNo", "DocNo2", "DocDate", "TaxDate", "DocType", "JournalType",
     "DealWith", "TaxEntity", "Description", "Extracted Description",
@@ -23,11 +15,47 @@ TEMPLATE_COLUMNS = [
     "BankChargeTaxRefNo", "PaymentBy", "FloatDay", "BankChargeDeptNo"
 ]
 
-# ==============================
-# Step 3: Extract Transactions from Excel
-# ==============================
+MONTH_MAP = {
+    "JAN": 1, "JANUARY": 1,
+    "FEB": 2, "FEBRUARY": 2,
+    "MAR": 3, "MARCH": 3,
+    "APR": 4, "APRIL": 4,
+    "MAY": 5,
+    "JUN": 6, "JUNE": 6,
+    "JUL": 7, "JULY": 7,
+    "AUG": 8, "AUGUST": 8,
+    "SEP": 9, "SEPT": 9, "SEPTEMBER": 9,
+    "OCT": 10, "OCTOBER": 10,
+    "NOV": 11, "NOVEMBER": 11,
+    "DEC": 12, "DECEMBER": 12,
+}
+
+def detect_month_from_filename(filename: str) -> int:
+    name_upper = filename.upper()
+    for key, month_num in MONTH_MAP.items():
+        if key in name_upper:
+            return month_num
+    return 99
+
+def find_header_positions(df: pd.DataFrame) -> dict:
+    header_map = {"date": None, "desc": None, "amount": None}
+    for i, row in df.iterrows():
+        row_str = [str(x).upper() if pd.notna(x) else "" for x in row]
+        if any("ENTRY DATE" in c for c in row_str) and any("DESCRIPTION" in c for c in row_str):
+            for j, cell in enumerate(row_str):
+                if "ENTRY DATE" in cell:
+                    header_map["date"] = j
+                if "DESCRIPTION" in cell:
+                    header_map["desc"] = j
+                if "AMOUNT" in cell:
+                    header_map["amount"] = j
+            return header_map, i
+    return header_map, 0
+
 def extract_excel_transactions(file_path: str) -> pd.DataFrame:
-    df = pd.read_excel(file_path, sheet_name=0, header=0)
+    raw_df = pd.read_excel(file_path, sheet_name=0, header=None)
+    header_map, header_row = find_header_positions(raw_df)
+    df = raw_df.iloc[header_row+1:].reset_index(drop=True)
 
     records = []
     or_counter = 1
@@ -35,30 +63,32 @@ def extract_excel_transactions(file_path: str) -> pd.DataFrame:
     current_desc = []
     last_entry_date = None
 
-    for idx, row in df.iterrows():
-        entry_date = row.iloc[0]   # ENTRY DATE
-        description = row.iloc[4]  # TRANSACTION DESCRIPTION
-        amount = row.iloc[13]      # TRANSACTION AMOUNT
+    for _, row in df.iterrows():
+        entry_date = row.iloc[header_map["date"]] if header_map["date"] is not None and len(row) > header_map["date"] else None
+        description = row.iloc[header_map["desc"]] if header_map["desc"] is not None and len(row) > header_map["desc"] else None
+        amount = row.iloc[header_map["amount"]] if header_map["amount"] is not None and len(row) > header_map["amount"] else None
 
-        # Track last non-empty date
         if pd.notna(entry_date):
             last_entry_date = entry_date
 
-        # Skip header-like rows
+        if isinstance(description, str) and "ENDING BALANCE" in description.upper():
+            if current_desc and records:
+                merged_desc = " ".join([d for d in current_desc if pd.notna(d)])
+                records[-1]["Extracted Description"] += " " + merged_desc
+                current_desc = []
+            break
+
         if isinstance(description, str) and "BEGINNING BALANCE" in description.upper():
             continue
-        if isinstance(amount, str) and "TRANSACTION AMOUNT" in amount.upper():
+        if isinstance(amount, str) and "TRANSACTION AMOUNT" in str(amount).upper():
             continue
 
-        # Valid transaction row
         if last_entry_date is not None and pd.notna(amount):
-            # Merge leftover description lines into last record
             if current_desc and records:
                 merged_desc = " ".join([d for d in current_desc if pd.notna(d)])
                 records[-1]["Extracted Description"] += " " + merged_desc
                 current_desc = []
 
-            # Clean numeric amount
             amount_str = str(amount).replace(",", "").strip()
             try:
                 if amount_str.endswith("+"):
@@ -70,7 +100,6 @@ def extract_excel_transactions(file_path: str) -> pd.DataFrame:
             except ValueError:
                 continue
 
-            # Assign DocNo and DocType
             if numeric_amount >= 0:
                 doc_no = f"OR{or_counter}"
                 doc_type = "OR"
@@ -80,15 +109,18 @@ def extract_excel_transactions(file_path: str) -> pd.DataFrame:
                 doc_type = "PV"
                 pv_counter += 1
 
-            # Build DocDate string with configured YEAR
             date_str = str(last_entry_date).strip()
-            if re.match(r"^\d{2}/\d{2}$", date_str):  # DD/MM
+            if re.match(r"^\d{2}/\d{2}$", date_str):
                 date_str = f"{date_str}/{YEAR}"
             doc_date = pd.to_datetime(date_str, dayfirst=True, errors="coerce")
-            try:
-                doc_date = doc_date.strftime("%-d/%-m/%Y")  # Linux/macOS
-            except:
-                doc_date = doc_date.strftime("%#d/%#m/%Y")  # Windows fallback
+
+            if pd.notna(doc_date):
+                try:
+                    doc_date = doc_date.strftime("%-d/%-m/%Y")
+                except:
+                    doc_date = doc_date.strftime("%#d/%#m/%Y")
+            else:
+                doc_date = ""
 
             record = {
                 "DocNo": doc_no,
@@ -96,7 +128,7 @@ def extract_excel_transactions(file_path: str) -> pd.DataFrame:
                 "DocDate": doc_date,
                 "TaxDate": "",
                 "DocType": doc_type,
-                "JournalType": "",
+                "JournalType": "Bank",
                 "DealWith": "",
                 "TaxEntity": "",
                 "Description": "",
@@ -116,41 +148,47 @@ def extract_excel_transactions(file_path: str) -> pd.DataFrame:
             }
             records.append(record)
 
-        # Continuation row (no amount but description exists)
         elif pd.isna(amount) and pd.notna(description):
             current_desc.append(str(description).strip())
 
-    # Flush last continuation description
-    if current_desc and records:
-        merged_desc = " ".join([d for d in current_desc if pd.notna(d)])
-        records[-1]["Extracted Description"] += " " + merged_desc
-
     return pd.DataFrame(records, columns=TEMPLATE_COLUMNS)
 
-# ==============================
-# Step 4: Process All Excel Files
-# ==============================
 def process_excel_files():
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
 
     all_records = []
-    for file in os.listdir(DATA_DIR):
-        if file.lower().endswith(".xlsx"):
-            file_path = os.path.join(DATA_DIR, file)
+    month_summary = {}
+    files = [f for f in os.listdir(DATA_DIR) if f.lower().endswith(".xlsx")]
+    files_sorted = sorted(files, key=lambda f: detect_month_from_filename(f))
+
+    for idx, file in enumerate(files_sorted, start=1):
+        file_path = os.path.join(DATA_DIR, file)
+        month_num = detect_month_from_filename(file)
+        month_name = [k for k, v in MONTH_MAP.items() if v == month_num and len(k) > 3]
+        month_label = month_name[0].capitalize() if month_name else "Unknown"
+        print(f"[{idx}/{len(files_sorted)}] 📂 {file} → Detected month: {month_label}")
+
+        try:
             df = extract_excel_transactions(file_path)
             if not df.empty:
                 all_records.append(df)
+                month_summary[month_label] = month_summary.get(month_label, 0) + len(df)
+            else:
+                print(f"⚠️ No valid transactions found in {file}")
+        except Exception as e:
+            print(f"⚠️ Skipped {file} due to error: {e}")
 
     if all_records:
         final_df = pd.concat(all_records, ignore_index=True)
         final_df.to_excel(OUTPUT_FILE, index=False)
-        print(f"Processed {len(final_df)} transactions → {OUTPUT_FILE}")
+        print(f"\n✅ Processed {len(final_df)} transactions from {len(files_sorted)} files → {OUTPUT_FILE}")
+
+        print("\n📊 Monthly Transaction Summary:")
+        for month, count in month_summary.items():
+            print(f"   {month}: {count} transactions")
     else:
         print("No valid transactions extracted.")
 
-# ==============================
-# Run Script
-# ==============================
 if __name__ == "__main__":
     process_excel_files()
