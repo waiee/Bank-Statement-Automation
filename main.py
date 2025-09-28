@@ -52,14 +52,14 @@ def find_header_positions(df: pd.DataFrame) -> dict:
             return header_map, i
     return header_map, 0
 
-def extract_excel_transactions(file_path: str) -> pd.DataFrame:
+def extract_excel_transactions(file_path: str, start_or: int, start_pv: int):
     raw_df = pd.read_excel(file_path, sheet_name=0, header=None)
     header_map, header_row = find_header_positions(raw_df)
     df = raw_df.iloc[header_row+1:].reset_index(drop=True)
 
     records = []
-    or_counter = 1
-    pv_counter = 1
+    or_counter = start_or
+    pv_counter = start_pv
     current_desc = []
     last_entry_date = None
 
@@ -151,7 +151,7 @@ def extract_excel_transactions(file_path: str) -> pd.DataFrame:
         elif pd.isna(amount) and pd.notna(description):
             current_desc.append(str(description).strip())
 
-    return pd.DataFrame(records, columns=TEMPLATE_COLUMNS)
+    return pd.DataFrame(records, columns=TEMPLATE_COLUMNS), or_counter, pv_counter
 
 def process_excel_files():
     if not os.path.exists(OUTPUT_DIR):
@@ -162,6 +162,9 @@ def process_excel_files():
     files = [f for f in os.listdir(DATA_DIR) if f.lower().endswith(".xlsx")]
     files_sorted = sorted(files, key=lambda f: detect_month_from_filename(f))
 
+    or_counter = 1
+    pv_counter = 1
+
     for idx, file in enumerate(files_sorted, start=1):
         file_path = os.path.join(DATA_DIR, file)
         month_num = detect_month_from_filename(file)
@@ -170,7 +173,7 @@ def process_excel_files():
         print(f"[{idx}/{len(files_sorted)}] 📂 {file} → Detected month: {month_label}")
 
         try:
-            df = extract_excel_transactions(file_path)
+            df, or_counter, pv_counter = extract_excel_transactions(file_path, or_counter, pv_counter)
             if not df.empty:
                 all_records.append(df)
                 month_summary[month_label] = month_summary.get(month_label, 0) + len(df)
