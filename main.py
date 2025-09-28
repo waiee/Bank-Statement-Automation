@@ -4,8 +4,12 @@ import re
 
 DATA_DIR = "data"
 OUTPUT_DIR = "output"
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, "WC_statements.xlsx")
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, "DB_statements.xlsx")
 YEAR = "2025"
+
+# Configurable prefixes 
+PREFIX_OR = "MDOR"   # Positive amounts
+PREFIX_PV = "MDPV"   # Negative amounts
 
 TEMPLATE_COLUMNS = [
     "DocNo", "DocNo2", "DocDate", "TaxDate", "DocType", "JournalType",
@@ -101,12 +105,12 @@ def extract_excel_transactions(file_path: str, start_or: int, start_pv: int):
                 continue
 
             if numeric_amount >= 0:
-                doc_no = f"OR{or_counter}"
-                doc_type = "OR"
+                doc_no = f"{PREFIX_OR}{or_counter}"
+                doc_type = PREFIX_OR
                 or_counter += 1
             else:
-                doc_no = f"PV{pv_counter}"
-                doc_type = "PV"
+                doc_no = f"{PREFIX_PV}{pv_counter}"
+                doc_type = PREFIX_PV
                 pv_counter += 1
 
             date_str = str(last_entry_date).strip()
