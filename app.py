@@ -10,10 +10,10 @@ import shutil
 # make sure main.py is in same folder or available in PYTHONPATH
 import main as bank_parser
 
-st.set_page_config(page_title="Bank Txn Extractor", layout="wide")
+st.set_page_config(page_title="Bank Statement Automation", layout="wide")
 
-st.title("Bank Statement → DB Statements")
-st.markdown("Upload one or more `.xlsx` bank statements and get a combined `DB_statements.xlsx`.")
+st.title("Bank Statement Automation")
+st.markdown("Upload one or more `bank statements` and get a combined `mastersheet.xlsx`.")
 
 # sidebar options
 st.sidebar.header("Options")
@@ -26,7 +26,7 @@ bank_parser.YEAR = year
 bank_parser.PREFIX_OR = prefix_or
 bank_parser.PREFIX_PV = prefix_pv
 
-uploaded = st.file_uploader("Upload .xlsx files", type=["xlsx"], accept_multiple_files=True)
+uploaded = st.file_uploader("Upload files", type=["pdf, xlsx"], accept_multiple_files=True)
 
 if uploaded:
     st.info(f"{len(uploaded)} file(s) uploaded. Processing...")
@@ -70,4 +70,4 @@ else:
     st.info("Upload files from the sidebar or drag-and-drop here.")
 
 st.sidebar.markdown("---")
-st.sidebar.write("Config reference: extracted from your `main.py`.")
+# st.sidebar.write("Config reference: extracted from your `main.py`.")
