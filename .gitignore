@@ -1,0 +1,41 @@
+# Virtual environment folders
+venv/
+env/
+.venv/
+ENV/
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.py.class
+
+# IDE & editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# macOS system files
+.DS_Store
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*.swp
+*.lock
+
+# Jupyter & Streamlit cache
+.ipynb_checkpoints/
+.streamlit/
+
+# Output or build folders
+dist/
+build/
+*.egg-info/
+output/
+tmp/
+temp/
