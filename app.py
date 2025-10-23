@@ -26,7 +26,7 @@ bank_parser.YEAR = year
 bank_parser.PREFIX_OR = prefix_or
 bank_parser.PREFIX_PV = prefix_pv
 
-uploaded = st.file_uploader("Upload files", type=["pdf, xlsx"], accept_multiple_files=True)
+uploaded = st.file_uploader("Upload files", type=["xlsx"], accept_multiple_files=True)
 
 if uploaded:
     st.info(f"{len(uploaded)} file(s) uploaded. Processing...")
@@ -54,7 +54,7 @@ if uploaded:
         if out_file.exists():
             st.success("Finished processing ✅")
             df_preview = pd.read_excel(out_file)
-            st.subheader("Preview (first 20 rows)")
+            st.subheader("Mastersheet Preview")
             st.dataframe(df_preview.head(20))
 
             # provide download
